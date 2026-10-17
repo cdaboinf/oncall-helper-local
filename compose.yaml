@@ -1,0 +1,47 @@
+# Local on-call incident tracker. No ports are published: nothing outside Docker can reach the database or the
+# embedding service. Claude talks to the app with `docker exec -i oncall-local-mcp ...` (see README.md).
+name: oncall-helper-local
+
+services:
+  mongodb:
+    # Atlas Local = MongoDB + vector search for local development. "preview" is MongoDB's documented tag;
+    # pin a version or digest once you have verified one on your machine.
+    image: mongodb/mongodb-atlas-local:preview
+    container_name: oncall-local-mongodb
+    hostname: mongodb
+    restart: unless-stopped
+    volumes:
+      - db:/data/db
+      - configdb:/data/configdb
+      - mongot:/data/mongot
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: oncall-local-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    # Start the server, then download the embedding model on first run (about 274 MB).
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5; ollama pull nomic-embed-text; wait"]
+
+  app:
+    build: .
+    container_name: oncall-local-mcp
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      MONGO_CONNECTION_STRING: mongodb://mongodb:27017/?directConnection=true
+      MONGO_DATABASE: oncall_local
+      EMBEDDINGS_BASE_URL: http://ollama:11434
+      EMBEDDINGS_MODEL: nomic-embed-text
+      EMBEDDINGS_DIMENSIONS: "768"
+
+volumes:
+  db:
+  configdb:
+  mongot:
+  ollama:

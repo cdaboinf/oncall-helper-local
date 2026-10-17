@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.DS_Store
+# local data and settings never go in git
+.env
+*.local.json
+# exports from the hosted app contain real incident data: never commit them
+exports/
+*.export.json
