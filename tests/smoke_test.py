@@ -29,7 +29,7 @@ def call(name, args):
 
 init = rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})
 p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"); p.stdin.flush()
-check("initialize", init["result"]["serverInfo"]["name"] == "oncall-helper-local" and "Searching well" in init["result"]["instructions"])
+check("initialize", init["result"]["serverInfo"]["name"] == "oncall-helper-local" and "Searching well" in init["result"]["instructions"] and "at least once" in init["result"]["instructions"])
 tools = sorted(t["name"] for t in rpc("tools/list")["result"]["tools"])
 check("exactly the four tools", tools == ["create_incident", "find_similar_incidents", "search_incidents", "update_incident"], ",".join(tools))
 

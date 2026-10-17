@@ -21,6 +21,10 @@ public static class ServerInstructions
             not invent facts; when statements conflict, prefer the latest confirmed one.
 
         Searching well (do this for every "have we seen this" question)
+        - ALWAYS run find_similar_incidents at least once for any "have we seen this", "is this a known issue" or "how was
+          it resolved" question, even when the question contains an exact term such as an error code or status (504, 500).
+          Keyword search only finds the exact words, so it cannot show that nothing exists: use it in addition, never
+          instead. Do not answer "no, we have not seen this" on keyword results alone.
         - Search more than once. Run find_similar_incidents with 2-3 different phrasings and merge the results: the
           symptom as reported; the likely cause or fix in plain words ("query timed out, split into smaller batches");
           and the key terms (error text, service, component). One phrasing misses things the others catch.
@@ -35,6 +39,8 @@ public static class ServerInstructions
           have, then ask at most ONE short clarifying question (service, error text, or when it happened).
 
         Answering
+        - Say in one short line what you searched (for example "semantic search with three phrasings, plus keyword search
+          for 504"), so the user can see how thorough the "no" is.
         - Lead with a one-line verdict: "Same issue as <title>", "Related to <title>", or "No close match".
         - Then at most three incidents, each as: title, id, score, root cause, how it was resolved. If one is the same
           issue, put how it was resolved first and what to try now. If nothing stands out, say so in one sentence and list
