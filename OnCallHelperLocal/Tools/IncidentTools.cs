@@ -20,7 +20,7 @@ public sealed class IncidentTools(IncidentService service)
     [McpServerTool(Name = "find_similar_incidents", ReadOnly = true, Destructive = false, OpenWorld = false)]
     [Description("Semantic search over saved incidents, by meaning. The searchable text of each incident is its title, description, root cause and resolution summary, so you can search for what happened OR for how something was fixed. Pass a short summary or a plain-words description of the cause or fix, NOT a raw chat. Search 2-3 times with different phrasings and merge the results. Scores are relative similarity (about 0.5 to 1) and bunch together when incidents are alike: judge by the gap between the best result and the rest, and by reading the incidents.")]
     public Task<string> FindSimilarIncidents(
-        [Description("A summary of the problem, a few sentences.")] string description,
+        [Description("REQUIRED. A summary of the problem, a few sentences. This tool takes `description` (not `query`).")] string description,
         [Description("How many results, 1-20.")] int top = 5,
         CancellationToken ct = default) =>
         Run(async () => await service.FindSimilarAsync(description, top, ct));

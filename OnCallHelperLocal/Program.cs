@@ -5,6 +5,7 @@ using OnCallHelperLocal;
 using OnCallHelperLocal.Data;
 using OnCallHelperLocal.Embeddings;
 using OnCallHelperLocal.Services;
+using OnCallHelperLocal.Tools;
 
 var settings = LocalSettings.FromEnvironment();
 
@@ -39,7 +40,7 @@ builder.Services
         o.ServerInstructions = ServerInstructions.Text;
     })
     .WithStdioServerTransport()
-    .WithToolsFromAssembly(serializerOptions: ToolJson.Options);
+    .WithLenientTools<IncidentTools>();
 
 await builder.Build().RunAsync();
 return 0;
