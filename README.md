@@ -26,7 +26,7 @@ Claude  --docker exec -i-->  oncall-local-mcp  --->  oncall-local-mongodb   (Mon
 | Tool | Kind | Purpose |
 |---|---|---|
 | `find_similar_incidents` | read | Semantic search from a short summary; returns incidents with similarity scores |
-| `search_incidents` | read | Keyword and filter search (service, severity, environment, dates), newest first |
+| `search_incidents` | read | Keyword and filter search (service, severity, environment, dates), newest first. With a text query it **also returns the closest incidents by meaning** (`semanticMatches`), so a keyword search can never end in a bare "nothing found" |
 | `create_incident` | write | Save a new incident (resolution optional while it is open) |
 | `update_incident` | write | Change fields of an incident, typically add the resolution; unspecified fields keep their values |
 

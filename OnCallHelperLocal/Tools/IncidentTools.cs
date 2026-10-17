@@ -26,9 +26,9 @@ public sealed class IncidentTools(IncidentService service)
         Run(async () => await service.FindSimilarAsync(description, top, ct));
 
     [McpServerTool(Name = "search_incidents", ReadOnly = true, Destructive = false, OpenWorld = false)]
-    [Description("Keyword and filter search over saved incidents, newest first. All filters are optional. The text query is a plain substring match on title, description and service name, so \"timeout\" does not match \"timed out\": try variants.")]
+    [Description("Keyword and filter search over saved incidents, newest first. All filters are optional. The text query is a plain substring match on title, description and service name, so \"timeout\" does not match \"timed out\" and an empty keywordMatches list NEVER means nothing similar exists. When you give a text query, the response also carries semanticMatches (the closest incidents by meaning, with relative scores): read both. For any \"have we seen this / known issue / how was it resolved\" question, also call find_similar_incidents with a plain-words description of the problem.")]
     public Task<string> SearchIncidents(
-        [Description("Text matched against title, description and service name.")] string? query = null,
+        [Description("Words to look for. Matched as exact text against title, description and service name; the same text is also searched by meaning.")] string? query = null,
         [Description("Exact service name.")] string? serviceName = null,
         [Description("Severity as stored, e.g. sev2.")] string? severity = null,
         [Description("Environment as stored, e.g. production.")] string? environment = null,

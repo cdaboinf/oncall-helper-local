@@ -140,6 +140,11 @@ def rpc(method, params=None):
 def call(name, args):
     r = rpc("tools/call", {"name": name, "arguments": args})["result"]; t = r["content"][0]["text"]
     return r.get("isError", False), (t if r.get("isError") else json.loads(t))
+def callkw(name, args):
+    """Like call(), but returns only the keyword list of a search_incidents result (the rest is checked separately)."""
+    err, out = call(name, args)
+    return err, (out["keywordMatches"] if not err and isinstance(out, dict) else out)
+
 rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})
 p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"); p.stdin.flush()
 
@@ -153,9 +158,9 @@ check("a question in different words finds the imported incident", found is not 
 check("the match carries its resolution and a score", found and found[0]["resolution"]["rootCause"] == "cause 0" and 0.5 < found[0]["score"] <= 1.0, f"{found[0]['score']:.3f}" if found else "")
 err, out = call("find_similar_incidents", {"description": "Customers say card payments were accepted but the balance never changed", "top": 5})
 check("a question about payments returns payment incidents", not err and len(out) == 5 and all(o["serviceName"] == "payment-service" for o in out), ",".join(sorted({o["serviceName"] for o in out})) if not err else str(out)[:80])
-err, out = call("search_incidents", {"serviceName": "kiosk-service"})
+err, out = callkw("search_incidents", {"serviceName": "kiosk-service"})
 check("keyword search sees the imported data", not err and len(out) == 1 and out[0]["title"] == "Kiosk zebra widget outage")
-err, out = call("search_incidents", {"serviceName": "billing-service", "limit": 100})
+err, out = callkw("search_incidents", {"serviceName": "billing-service", "limit": 100})
 expected_billing = sum(1 for i in incidents if i["serviceName"] == "billing-service" and i["description"].strip() and i["id"] != "not-a-valid-id")
 check("filters work on the imported data", not err and len(out) == expected_billing, f"{len(out) if not err else out} of {expected_billing}")
 

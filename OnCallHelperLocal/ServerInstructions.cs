@@ -31,7 +31,8 @@ public static class ServerInstructions
         - What is searchable: each incident's title, description, root cause and resolution summary. So questions about
           HOW something was fixed work, not only questions about what happened.
         - search_incidents is a plain substring match: "timeout" does not match "timed out". Try variants, and combine
-          with serviceName, severity, environment or date filters when the user gives them.
+          with serviceName, severity, environment or date filters when the user gives them. When you pass a text query it
+          also returns semanticMatches (closest by meaning): an empty keywordMatches list never means nothing exists.
         - Scores are relative similarity (about 0.5 to 1) and bunch together when the history is all about similar
           systems. Judge by the gap between the best result and the rest, and by reading the incidents. A top score that
           is barely above the others means nothing stands out.

@@ -27,6 +27,11 @@ def call(name, args):
     text = r["content"][0]["text"]
     return r.get("isError", False), (text if r.get("isError") else json.loads(text))
 
+def callkw(name, args):
+    """Like call(), but returns only the keyword list of a search_incidents result (the rest is checked separately)."""
+    err, out = call(name, args)
+    return err, (out["keywordMatches"] if not err and isinstance(out, dict) else out)
+
 init = rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})
 p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n"); p.stdin.flush()
 check("initialize", init["result"]["serverInfo"]["name"] == "oncall-helper-local" and "Searching well" in init["result"]["instructions"] and "at least once" in init["result"]["instructions"])
@@ -103,23 +108,35 @@ while time.time() - t0 < 60:
     time.sleep(1)
 check("a question about how it was fixed finds the incident (resolution text is searchable)", hit is not None, f"score {hit['score']:.3f}" if hit else "not found")
 
-err, out = call("search_incidents", {"serviceName": "payments-api"})
+# search_incidents carries the semantic matches with the keyword ones, so a keyword-only "no" cannot happen.
+err, full = call("search_incidents", {"query": "504"})
+check("a keyword search with no hits still returns semantic matches", not err and full["keywordMatches"] == [] and len(full["semanticMatches"]) > 0 and "NOT mean" in full["note"], f"{len(full['semanticMatches']) if not err else full} semantic")
+err, full = call("search_incidents", {"query": "stale cdn bundle purged"})
+check("semantic matches find a fix by meaning when no exact words match", not err and full["keywordMatches"] == [] and full["semanticMatches"] and full["semanticMatches"][0]["title"] == "Report page blank for some users", full["semanticMatches"][0]["title"] if not err and full["semanticMatches"] else str(full)[:80])
+err, full = call("search_incidents", {"severity": "sev3"})
+check("a filter-only search computes no semantic matches and says so", not err and full["semanticMatches"] == [] and "Filter-only" in full["note"] and len(full["keywordMatches"]) == 2)
+err, full = call("search_incidents", {"query": "database host", "serviceName": "payments-api"})
+check("semantic matches respect the filters", not err and len(full["semanticMatches"]) > 0 and all(m["serviceName"] == "payments-api" for m in full["semanticMatches"]), ",".join(sorted({m["serviceName"] for m in full["semanticMatches"]})) if not err else str(full)[:80])
+err, full = call("search_incidents", {"query": "x" * 7000})   # over the 6,000-character limit
+check("an over-long query still returns keyword results and explains the skipped semantic part", not err and full["semanticMatches"] == [] and "longer than" in full["note"])
+
+err, out = callkw("search_incidents", {"serviceName": "payments-api"})
 check("filter by service", not err and len(out) == 2, f"{len(out) if not err else out}")
-err, out = call("search_incidents", {"query": "certificate", "limit": 5})
+err, out = callkw("search_incidents", {"query": "certificate", "limit": 5})
 check("text search", not err and len(out) == 1 and out[0]["title"].startswith("Certificate"))
-err, out = call("search_incidents", {"severity": "sev3", "from": "2000-01-01", "to": "2999-01-01"})
+err, out = callkw("search_incidents", {"severity": "sev3", "from": "2000-01-01", "to": "2999-01-01"})
 check("severity and date filters", not err and len(out) == 2)
 
 # Claude sometimes sends a number or boolean where text is expected (an error code such as 504). That must work.
-err, out = call("search_incidents", {"query": 504})
+err, out = callkw("search_incidents", {"query": 504})
 check("a numeric search term (query: 504 as a JSON number) is accepted", not err and out == [], str(out)[:80])
-err, out = call("search_incidents", {"serviceName": 12345})
+err, out = callkw("search_incidents", {"serviceName": 12345})
 check("a numeric service name is accepted", not err and out == [], str(out)[:80])
-err, out = call("search_incidents", {"query": True})
+err, out = callkw("search_incidents", {"query": True})
 check("a boolean where text is expected is accepted", not err, str(out)[:80])
 err, out = call("find_similar_incidents", {"description": 504, "top": 2})
 check("a numeric description for similarity search is accepted", not err and isinstance(out, list), str(out)[:80])
-err, out = call("search_incidents", {"query": "certificate", "limit": "5"})
+err, out = callkw("search_incidents", {"query": "certificate", "limit": "5"})
 check("numbers sent as text for limit still work", not err and len(out) == 1)
 
 err, msg = call("create_incident", {"title": "x", "description": "", "serviceName": "s", "environment": "production", "severity": "sev3"})
@@ -132,7 +149,7 @@ err, msg = call("update_incident", {"id": "64b7f0c2a1b2c3d4e5f60718", "title": "
 check("updating an unknown id is a clear error", err and "not found" in msg)
 err, msg = call("update_incident", {"id": "not-an-id", "title": "x"})
 check("a malformed id is a clear error", err and "not found" in msg)
-err, msg = call("search_incidents", {"from": "yesterday-ish"})
+err, msg = callkw("search_incidents", {"from": "yesterday-ish"})
 check("a bad date is a clear error", err and "ISO-8601" in msg)
 
 # `reembed` upgrades incidents saved with the old (description-only) recipe, from the stored text alone.

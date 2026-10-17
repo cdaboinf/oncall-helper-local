@@ -19,6 +19,12 @@ public sealed record ResolutionView(string? RootCause, string? Summary, List<str
 public sealed record IncidentView(string Id, string Title, string ServiceName, string Environment, string Severity,
     string Description, DateTime CreatedAt, ResolutionView? Resolution, double? Score);
 
+/// <summary>
+/// Result of search_incidents. A keyword search only finds exact words, so an empty KeywordMatches never means "nothing
+/// like this exists". When a text query is given, SemanticMatches (closest by meaning) always travel with it.
+/// </summary>
+public sealed record SearchResult(List<IncidentView> KeywordMatches, List<IncidentView> SemanticMatches, string Note);
+
 public sealed record UpdateResult(IncidentView Incident, bool EmbeddingUpdated, string? Warning);
 
 /// <summary>The rules mirror IncidentService in the AWS app: only the description is embedded.</summary>
@@ -102,10 +108,55 @@ public sealed class IncidentService(IncidentStore store, IEmbedder embedder)
         return new UpdateResult(ToView(incident), embeddingUpdated, warning);
     }
 
-    public async Task<List<IncidentView>> SearchAsync(string? q, string? serviceName, string? severity, string? environment,
-        DateTime? from, DateTime? to, int limit, CancellationToken ct) =>
-        (await store.SearchAsync(q, serviceName, severity, environment, from, to, Math.Clamp(limit, 1, 100), ct))
+    private const int SemanticTop = 5;
+
+    public async Task<SearchResult> SearchAsync(string? q, string? serviceName, string? severity, string? environment,
+        DateTime? from, DateTime? to, int limit, CancellationToken ct)
+    {
+        var keyword = (await store.SearchAsync(q, serviceName, severity, environment, from, to, Math.Clamp(limit, 1, 100), ct))
             .Select(ToView).ToList();
+        var semantic = new List<IncidentView>();
+        string note;
+
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            note = "Filter-only search: there was no text query, so no semantic matches were computed.";
+        }
+        else if (q.Length > MaxDescriptionChars)
+        {
+            note = $"The query is longer than {MaxDescriptionChars} characters, so no semantic matches were computed; summarize it.";
+        }
+        else
+        {
+            try
+            {
+                var filtered = !string.IsNullOrWhiteSpace(serviceName) || !string.IsNullOrWhiteSpace(severity)
+                    || !string.IsNullOrWhiteSpace(environment) || from.HasValue || to.HasValue;
+                var vector = await embedder.EmbedQueryAsync(q, ct);
+                // The vector search cannot take filters, so fetch more candidates and filter them here.
+                var candidates = await store.FindSimilarAsync(vector, filtered ? 20 : SemanticTop, ct);
+                semantic = candidates
+                    .Where(i => Matches(i, serviceName, severity, environment, from, to))
+                    .Take(SemanticTop).Select(ToView).ToList();
+                note = "keywordMatches are incidents containing your exact words: an empty list does NOT mean nothing similar " +
+                       "exists. semanticMatches are the closest incidents by meaning, with relative similarity scores (about 0.5 to 1): " +
+                       "judge by the gap between the best and the rest, and read them.";
+            }
+            catch (McpException ex)
+            {
+                note = $"Semantic matches are unavailable ({ex.Message}); only keyword matches are shown. " +
+                       "Run find_similar_incidents once the problem is fixed.";
+            }
+        }
+        return new SearchResult(keyword, semantic, note);
+    }
+
+    private static bool Matches(Incident i, string? serviceName, string? severity, string? environment, DateTime? from, DateTime? to) =>
+        (string.IsNullOrWhiteSpace(serviceName) || i.Metadata.ServiceName == serviceName.Trim())
+        && (string.IsNullOrWhiteSpace(severity) || i.Metadata.Severity == severity.Trim())
+        && (string.IsNullOrWhiteSpace(environment) || i.Metadata.Environment == environment.Trim())
+        && (!from.HasValue || i.CreatedAt >= from.Value)
+        && (!to.HasValue || i.CreatedAt <= to.Value);
 
     public async Task<List<IncidentView>> FindSimilarAsync(string description, int top, CancellationToken ct)
     {
