@@ -110,6 +110,18 @@ check("text search", not err and len(out) == 1 and out[0]["title"].startswith("C
 err, out = call("search_incidents", {"severity": "sev3", "from": "2000-01-01", "to": "2999-01-01"})
 check("severity and date filters", not err and len(out) == 2)
 
+# Claude sometimes sends a number or boolean where text is expected (an error code such as 504). That must work.
+err, out = call("search_incidents", {"query": 504})
+check("a numeric search term (query: 504 as a JSON number) is accepted", not err and out == [], str(out)[:80])
+err, out = call("search_incidents", {"serviceName": 12345})
+check("a numeric service name is accepted", not err and out == [], str(out)[:80])
+err, out = call("search_incidents", {"query": True})
+check("a boolean where text is expected is accepted", not err, str(out)[:80])
+err, out = call("find_similar_incidents", {"description": 504, "top": 2})
+check("a numeric description for similarity search is accepted", not err and isinstance(out, list), str(out)[:80])
+err, out = call("search_incidents", {"query": "certificate", "limit": "5"})
+check("numbers sent as text for limit still work", not err and len(out) == 1)
+
 err, msg = call("create_incident", {"title": "x", "description": "", "serviceName": "s", "environment": "production", "severity": "sev3"})
 check("empty description is rejected", err and "description is required" in msg)
 err, msg = call("create_incident", {"title": "x", "description": "a" * 7000, "serviceName": "s", "environment": "production", "severity": "sev3"})

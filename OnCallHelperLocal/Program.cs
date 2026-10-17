@@ -39,7 +39,7 @@ builder.Services
         o.ServerInstructions = ServerInstructions.Text;
     })
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithToolsFromAssembly(serializerOptions: ToolJson.Options);
 
 await builder.Build().RunAsync();
 return 0;
