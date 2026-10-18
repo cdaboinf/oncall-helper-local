@@ -42,13 +42,16 @@ check("exactly the four tools", tools == ["create_incident", "find_similar_incid
 T = {t["name"]: t for t in tool_list}
 untyped = [(n, k) for n, t in T.items() for k, v in t["inputSchema"]["properties"].items() if "type" not in v]
 check("every tool parameter states its type (text parameters are not left untyped)", not untyped, str(untyped)[:100])
-check("find_similar_incidents requires `description`, as text", T["find_similar_incidents"]["inputSchema"].get("required") == ["description"]
-      and "string" in T["find_similar_incidents"]["inputSchema"]["properties"]["description"]["type"])
+fs = T["find_similar_incidents"]["inputSchema"]
+check("find_similar_incidents accepts `description` OR `query` (neither required, both text)", not fs.get("required")
+      and all("string" in fs["properties"][k]["type"] for k in ("description", "query")))
 check("the required parameters of create_incident are still required", T["create_incident"]["inputSchema"].get("required") == ["title", "description", "serviceName", "environment", "severity"])
 check("array items are typed as text", T["create_incident"]["inputSchema"]["properties"]["stepsTaken"]["items"].get("type") == "string")
 check("tool safety hints survive (update is destructive, create is not read-only)", T["update_incident"]["annotations"]["destructiveHint"] is True and T["create_incident"]["annotations"]["readOnlyHint"] is False and T["search_incidents"]["annotations"]["readOnlyHint"] is True)
 check("a missing required argument gets a clear server-side message, not a vague schema error",
-      (lambda r: r[0] and "description is required" in r[1])(call("find_similar_incidents", {"description": None, "top": 2})))
+      (lambda r: r[0] and "description is required" in r[1])(call("find_similar_incidents", {"top": 2})))
+check("find_similar_incidents works when the model sends `query` instead of `description`",
+      (lambda r: not r[0])(call("find_similar_incidents", {"query": "certificate expired on the gateway", "top": 2})))
 
 seed = [  # made-up incidents, written in the style Claude would produce
  ("Card payments accepted but not posted to accounts", "payments-api", "production", "sev2",

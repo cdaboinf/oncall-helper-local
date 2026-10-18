@@ -20,10 +20,18 @@ public sealed class IncidentTools(IncidentService service)
     [McpServerTool(Name = "find_similar_incidents", ReadOnly = true, Destructive = false, OpenWorld = false)]
     [Description("Semantic search over saved incidents, by meaning. The searchable text of each incident is its title, description, root cause and resolution summary, so you can search for what happened OR for how something was fixed. Pass a short summary or a plain-words description of the cause or fix, NOT a raw chat. Search 2-3 times with different phrasings and merge the results. Scores are relative similarity (about 0.5 to 1) and bunch together when incidents are alike: judge by the gap between the best result and the rest, and by reading the incidents.")]
     public Task<string> FindSimilarIncidents(
-        [Description("REQUIRED. A summary of the problem, a few sentences. This tool takes `description` (not `query`).")] string description,
+        [Description("A summary of the problem, a few sentences. Give this (or `query`).")] string? description = null,
+        [Description("Same as `description`; accepted so that either name works.")] string? query = null,
         [Description("How many results, 1-20.")] int top = 5,
         CancellationToken ct = default) =>
-        Run(async () => await service.FindSimilarAsync(description, top, ct));
+        Run(async () =>
+        {
+            // Both names are optional in the schema on purpose: a client that validates arguments before sending
+            // them rejects a call with the "wrong" name, and the model keeps mixing up description and query.
+            var text = !string.IsNullOrWhiteSpace(description) ? description : query;
+            if (string.IsNullOrWhiteSpace(text)) throw new McpException("description is required.");
+            return await service.FindSimilarAsync(text, top, ct);
+        });
 
     [McpServerTool(Name = "search_incidents", ReadOnly = true, Destructive = false, OpenWorld = false)]
     [Description("Keyword and filter search over saved incidents, newest first. All filters are optional. The text query is a plain substring match on title, description and service name, so \"timeout\" does not match \"timed out\" and an empty keywordMatches list NEVER means nothing similar exists. When you give a text query, the response also carries semanticMatches (the closest incidents by meaning, with relative scores): read both. For any \"have we seen this / known issue / how was it resolved\" question, also call find_similar_incidents with a plain-words description of the problem.")]
