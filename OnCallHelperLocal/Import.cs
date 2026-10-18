@@ -8,7 +8,8 @@ using MongoDB.Bson;
 namespace OnCallHelperLocal;
 
 /// <summary>
-/// `import [--dry-run]`: reads a JSON array of incidents from stdin (the export of the hosted app) and loads them into the
+/// `import [--dry-run] [--file path]`: reads a JSON array of incidents from stdin, or from a file with --file (the hosted
+/// export or a `backup` file), and loads them into the
 /// local database. Original ids and dates are kept, so running it again updates instead of duplicating. The hosted app's
 /// vectors come from a different model, so every description is embedded again here.
 /// </summary>
@@ -17,11 +18,17 @@ public static class Import
     public static async Task<int> RunAsync(LocalSettings settings, string[] args)
     {
         var dryRun = args.Contains("--dry-run");
+        var fileArg = Array.IndexOf(args, "--file");
+        string? file = fileArg >= 0 && fileArg + 1 < args.Length ? args[fileArg + 1] : null;
+        if (fileArg >= 0 && file is null) { Console.Error.WriteLine("--file needs a path."); return 1; }
+        if (file is not null && !File.Exists(file)) { Console.Error.WriteLine($"File not found: {file}"); return 1; }
 
         List<IncidentView>? items;
         try
         {
-            items = JsonSerializer.Deserialize<List<IncidentView>>(await Console.In.ReadToEndAsync(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            // A file is read as UTF-8 text (a leading byte-order mark is dropped); stdin depends on how the shell pipes it.
+            var json = file is not null ? await File.ReadAllTextAsync(file) : await Console.In.ReadToEndAsync();
+            items = JsonSerializer.Deserialize<List<IncidentView>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
         catch (JsonException ex)
         {

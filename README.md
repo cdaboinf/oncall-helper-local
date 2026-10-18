@@ -75,6 +75,49 @@ Paste or attach a Slack conversation and ask, for example:
 Later: *"Update that incident with the resolution: ..."*. The server instructions tell Claude to ask before every
 write and to keep code, copied wiki text, secrets and personal data out of what it saves.
 
+## Running on a work laptop (ready-made images)
+`compose.corp.yaml` starts the same stack from published images, so nothing is built on the laptop. It needs Docker
+Desktop, the files `compose.corp.yaml` and the `scripts` folder, and (once) internet access to download the images and the
+embedding model. MongoDB and Ollama are pinned by digest; the app image is `cedaboin/oncall-helper-local:0.3.0`
+(Intel/AMD and ARM).
+
+1. **Publish the app image** (on the Mac where the code is, logged in to Docker Hub with `docker login`):
+   ```
+   docker buildx build --platform linux/amd64,linux/arm64 -t cedaboin/oncall-helper-local:0.3.0 --push .
+   ```
+   Use a new tag for every change and update `compose.corp.yaml` to match. The image holds code only: no data, no secrets.
+2. **Start** (on the laptop, in the folder with `compose.corp.yaml`):
+   ```
+   docker compose -f compose.corp.yaml up -d
+   docker logs -f oncall-local-mcp
+   ```
+   Wait for `vector index 'vector_index' ready`. Then connect Claude as described above.
+3. **Load the data**. Put the export file anywhere on the laptop, then:
+   ```
+   ./scripts/import-data.sh path/to/hosted-incidents-<time>.export.json          # Mac / Linux
+   .\scripts\import-data.ps1 path\to\hosted-incidents-<time>.export.json       # Windows PowerShell
+   ```
+   It shows a dry run, asks you to type `yes`, imports, and removes its temporary copy inside the container. Running it
+   again updates instead of duplicating. Delete the export file afterwards.
+4. **Install the skill** in the Claude app on the laptop: Settings > Capabilities > Skills, upload `dist/triage.zip`
+   (make it with `cd skill && zip -r ../dist/triage.zip triage`, or `Compress-Archive -Path skill\triage -DestinationPath dist\triage.zip`
+   in PowerShell). Your organisation may restrict custom skills; if the upload is not offered, ask your Claude admin.
+   Start it by typing `/triage` (or "triage this") followed by the pasted chat.
+
+### Backups and surviving restarts
+- **What survives by itself**: the data lives in Docker volumes and the containers restart with Docker Desktop
+  (`restart: unless-stopped`; turn on *Start Docker Desktop when you sign in*). A laptop restart or a Docker Desktop crash
+  does not remove the volumes.
+- **What does not**: `docker compose down -v`, Docker Desktop's *Reset to factory defaults* / *Clean / Purge data*,
+  uninstalling it, or re-imaging the laptop delete the volumes. A crash during a write can in rare cases damage the database.
+  So keep backups.
+- **Backup**: `./scripts/backup.sh` (Windows: `.\scripts\backup.ps1`) writes `backups/incidents-backup-<date-time>.json` on the
+  laptop's own disk, outside Docker, and keeps the newest 30 (`KEEP=10` changes that). It holds real incident data: keep it
+  where your organisation allows, and never commit it (the folder is ignored by Git). To run it daily, schedule the script
+  (Windows Task Scheduler, or cron on Mac / Linux).
+- **Restore** (empty database, or after a reset): start the stack, then `./scripts/import-data.sh backups/<file>.json`.
+  Vectors are rebuilt during the import, so the backup file stays small.
+
 ## Copy incidents from the hosted app
 Two steps: export from the hosted API, then import into the local database. The hosted app's vectors come from a
 different model, so every description is embedded again locally; ids, dates and resolutions are kept, and running the
@@ -127,9 +170,9 @@ Uses only made-up incidents and a separate test database (`oncall_local_test`, d
 
 ## Data, backup, reset
 - Data lives in the Docker volumes `oncall-helper-local_db`, `_configdb`, `_mongot` and the model in `_ollama`.
-- Backup (consistent only while stopped): `docker compose stop`, then copy the volume, for example
-  `docker run --rm -v oncall-helper-local_db:/data -v "%cd%":/backup alpine tar czf /backup/db.tgz -C /data .`
-  (use `${PWD}` in PowerShell, `$(pwd)` in a Mac or Linux shell).
+- Backup: `docker exec oncall-local-mcp dotnet OnCallHelperLocal.dll backup /tmp/bk` writes a dated JSON file inside the
+  container; with `compose.corp.yaml` use `scripts/backup.sh`, which writes to the `backups` folder on your disk.
+  Restore with `import --file`. (Copying the raw volume is also possible, but only while stopped.)
 - Reset everything, including the downloaded model: `docker compose down -v`.
 
 ## Limits worth knowing

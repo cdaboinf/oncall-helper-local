@@ -1,0 +1,54 @@
+# Runs the local on-call incident tracker from READY-MADE images (nothing is built on this machine):
+#   docker compose -f compose.corp.yaml up -d
+# No ports are published: nothing outside Docker can reach the database or the embedding service.
+# Claude talks to the app with `docker exec -i oncall-local-mcp ...` (see README.md).
+#
+# Versions are pinned (the MongoDB and Ollama digests are the ones this was tested with, MongoDB 8.3.13 and Ollama 0.40.5;
+# both are multi-platform, so they run on Intel/AMD and ARM). Change them deliberately, then test, never by accident.
+name: oncall-helper-local
+
+services:
+  mongodb:
+    image: mongodb/mongodb-atlas-local@sha256:ff75fd47e918952cc91094e888e8aeb7529aeb70f987b075aeef3944c9bd8014
+    container_name: oncall-local-mongodb
+    hostname: mongodb
+    restart: unless-stopped
+    volumes:
+      - db:/data/db
+      - configdb:/data/configdb
+      - mongot:/data/mongot
+
+  ollama:
+    image: ollama/ollama@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241
+    container_name: oncall-local-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    # Start the server, then download the embedding model on first run (about 274 MB). Later starts reuse the saved copy.
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5; ollama pull nomic-embed-text; wait"]
+
+  app:
+    image: cedaboin/oncall-helper-local:0.3.0
+    container_name: oncall-local-mcp
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      MONGO_CONNECTION_STRING: mongodb://mongodb:27017/?directConnection=true
+      MONGO_DATABASE: oncall_local
+      EMBEDDINGS_BASE_URL: http://ollama:11434
+      EMBEDDINGS_MODEL: nomic-embed-text
+      EMBEDDINGS_DIMENSIONS: "768"
+    volumes:
+      # Backups are written to this folder on the laptop's own disk (next to this file), outside Docker's volumes, so
+      # they survive even if Docker Desktop is reset or reinstalled.
+      - ./backups:/backups
+
+volumes:
+  db:
+  configdb:
+  mongot:
+  ollama:

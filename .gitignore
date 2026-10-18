@@ -10,3 +10,6 @@ obj/
 # exports from the hosted app contain real incident data: never commit them
 exports/
 *.export.json
+
+# built skill package (made with the zip command in README.md)
+dist/

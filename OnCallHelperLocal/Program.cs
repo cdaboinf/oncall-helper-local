@@ -15,6 +15,8 @@ if (args.Length > 0 && args[0] == "setup")
 
 if (args.Length > 0 && args[0] == "import")
     return await Import.RunAsync(settings, args);
+if (args.Length > 0 && args[0] == "backup")
+    return await Backup.RunAsync(settings, args);
 if (args.Length > 0 && args[0] == "reembed")
     return await Reembed.RunAsync(settings, args);
 
@@ -36,7 +38,7 @@ builder.Services.AddSingleton<IncidentService>();
 builder.Services
     .AddMcpServer(o =>
     {
-        o.ServerInfo = new() { Name = "oncall-helper-local", Version = "0.2.0" };
+        o.ServerInfo = new() { Name = "oncall-helper-local", Version = "0.3.0" };
         o.ServerInstructions = ServerInstructions.Text;
     })
     .WithStdioServerTransport()

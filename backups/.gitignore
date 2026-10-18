@@ -1,0 +1,4 @@
+# Backup files hold real incident data: never commit them
+*
+!.gitignore
+!.gitkeep
